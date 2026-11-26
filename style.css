@@ -53,23 +53,6 @@ body{font-family:"Segoe UI",Arial,sans-serif;line-height:1.7}
 .service-body details[open]>summary::after{content:"−"}
 .capability .support-grid article{background:var(--paper)}
 .capability .support-grid h3{margin-top:0}
-.sales-report{margin-top:36px}
-.sales-scroll{overflow-x:auto}
-.sales-scroll:focus-visible{outline:2px solid var(--orange);outline-offset:4px}
-.sales-table{width:100%;border-collapse:collapse;font-size:14px}
-.sales-table caption{text-align:left;padding-bottom:12px;color:var(--muted)}
-.sales-table th,.sales-table td{padding:12px 16px;border-bottom:1px solid #dce4df;text-align:left}
-.sales-table thead{background:var(--navy);color:#fff}
-.sales-table tbody{background:var(--paper)}
-.sales-table tbody tr:nth-child(even){background:#fff}
-.sales-table tfoot{background:#e6eeeb;font-weight:700}
-.sales-table th:not(:first-child),.sales-table td{text-align:right;font-variant-numeric:tabular-nums}
-.sales-table td strong{display:inline-block;color:var(--navy);font-size:clamp(16px,2.2vw,24px);font-variant-numeric:tabular-nums}
-@media(max-width:550px){
-  .sales-table{font-size:13px}
-  .sales-table th,.sales-table td{padding:10px 7px}
-  .sales-table td{white-space:nowrap}
-}
 .work-photos{margin-top:36px}
 .work-photo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:20px}
 .work-photo-grid figure{min-width:0;margin:0}
@@ -98,3 +81,14 @@ body{font-family:"Segoe UI",Arial,sans-serif;line-height:1.7}
   .header{flex-wrap:wrap}
   .header nav{width:100%;justify-content:flex-end}
 }
+
+.support-form-panel{grid-column:1/-1;background:#fff;color:var(--ink);padding:clamp(20px,4vw,36px);border-radius:4px}
+.support-form-panel h3{margin:0 0 18px}
+.support-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.support-form label{display:grid;gap:6px;font-weight:600;font-size:14px}
+.support-form input,.support-form select,.support-form textarea{width:100%;padding:10px;border:1px solid #b3c2c7;border-radius:3px;background:#fff;color:var(--ink);font:inherit;font-weight:400}
+.support-form textarea{resize:vertical}
+.support-form label:last-of-type,.support-form p{grid-column:1/-1}
+.support-form p{margin:0;font-size:14px}
+.support-form button{justify-self:start;cursor:pointer;font:inherit;font-weight:600}
+@media(max-width:550px){.support-form{grid-template-columns:1fr}}
