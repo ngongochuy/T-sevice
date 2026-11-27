@@ -10,9 +10,11 @@ import sqlite3
 import time
 from contextlib import closing
 from datetime import datetime, timezone
+from email import policy
+from email.parser import BytesParser
 from http.cookies import CookieError, SimpleCookie
 from pathlib import Path
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, quote
 from wsgiref.simple_server import make_server
 
 
@@ -25,6 +27,11 @@ COOKIE = "td_admin"
 SESSION_TTL = 8 * 3600
 EQUIPMENT = {"Thang máy", "Biến tần", "Điện mặt trời", "Khác"}
 STATUS = {"new": "Mới", "working": "Đang xử lý", "done": "Đã xử lý"}
+MAX_DOCUMENT_BYTES = 20 * 1024 * 1024
+DOCUMENT_SIGNATURES = {
+    ".pdf": b"%PDF-", ".docx": b"PK\x03\x04",
+    ".xlsx": b"PK\x03\x04", ".pptx": b"PK\x03\x04",
+}
 
 
 def open_db():
@@ -44,6 +51,9 @@ def initialize():
             );
             CREATE TABLE IF NOT EXISTS sessions (
                 token TEXT PRIMARY KEY, csrf TEXT NOT NULL, expires INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS documents (
+                id INTEGER PRIMARY KEY, filename TEXT NOT NULL, content BLOB NOT NULL
             );
         """)
 
@@ -191,9 +201,82 @@ def dashboard(env, start, db, session):
     more = f'<a href="/admin?before={rows[49]["id"]}">Yêu cầu cũ hơn →</a>' if len(rows) > 50 else ""
     first = '<p><a href="/admin">Về danh sách mới nhất</a></p>' if before else ""
     return respond(start, "200 OK", page(f"""
-        <h1>Yêu cầu hỗ trợ</h1><form method="post" action="/admin/logout">
+        <h1>Yêu cầu hỗ trợ</h1><p><a href="/admin/documents">Quản lý tài liệu</a></p>
+        <form method="post" action="/admin/logout">
         <input type="hidden" name="csrf" value="{session['csrf']}">
         <button>Đăng xuất</button></form>{first}{listing}{more}""", wide=True))
+
+
+def documents_page(env, start, db, session, error="", status="200 OK"):
+    before = parse_qs(env.get("QUERY_STRING", "")).get("before", [""])[0]
+    max_id = int(before) if re.fullmatch(r"[0-9]{1,18}", before) else 2**63 - 1
+    rows = db.execute(
+        "SELECT id, filename FROM documents WHERE id<? ORDER BY id DESC LIMIT 51", (max_id,)
+    ).fetchall()
+    entries = "".join(
+        f'<li><a href="/admin/documents/{row["id"]}">{html.escape(row["filename"])}</a></li>'
+        for row in rows[:50]
+    )
+    listing = f"<ul>{entries}</ul>" if entries else "<p>Chưa có tài liệu.</p>"
+    more = (f'<a href="/admin/documents?before={rows[49]["id"]}">Tài liệu cũ hơn →</a>'
+            if len(rows) > 50 else "")
+    alert = f'<p class="error" role="alert">{html.escape(error)}</p>' if error else ""
+    return respond(start, status, page(f"""
+        <p><a href="/admin">Về trang quản trị</a></p>
+        <h1>Quản lý tài liệu</h1>
+        <section><h2>Thêm tài liệu</h2>{alert}
+        <form method="post" action="/admin/documents" enctype="multipart/form-data">
+        <input type="hidden" name="csrf" value="{session['csrf']}">
+        <label>Tệp PDF, DOCX, XLSX hoặc PPTX (tối đa 20 MB)
+        <input type="file" name="document" accept=".pdf,.docx,.xlsx,.pptx" required></label>
+        <button>Tải lên</button></form></section>
+        <section><h2>Tài liệu đã lưu</h2>{listing}{more}</section>""", wide=True))
+
+
+def upload_document(env, start, db, session):
+    content_type = env.get("CONTENT_TYPE", "")
+    try:
+        length = int(env.get("CONTENT_LENGTH") or 0)
+    except ValueError:
+        length = 0
+    if length > MAX_DOCUMENT_BYTES + 8192:
+        return documents_page(env, start, db, session, "Tệp vượt quá 20 MB.", "413 Payload Too Large")
+    if not length or length < 0 or not content_type.startswith("multipart/form-data;"):
+        return respond(start, "400 Bad Request")
+    if not content_type.isascii() or "\r" in content_type or "\n" in content_type:
+        return respond(start, "400 Bad Request")
+
+    message = BytesParser(policy=policy.default).parsebytes(
+        f"Content-Type: {content_type}\r\n\r\n".encode("ascii") + env["wsgi.input"].read(length)
+    )
+    if not message.is_multipart() or message.defects:
+        return respond(start, "400 Bad Request")
+    parts = {part.get_param("name", header="content-disposition"): part for part in message.iter_parts()}
+    csrf = parts.get("csrf")
+    if csrf is None or not hmac.compare_digest(csrf.get_payload(decode=True) or b"", session["csrf"].encode()):
+        return respond(start, "403 Forbidden")
+
+    document = parts.get("document")
+    filename = re.split(r"[/\\]", document.get_filename() or "")[-1].strip() if document else ""
+    content = document.get_payload(decode=True) if document else None
+    signature = DOCUMENT_SIGNATURES.get(Path(filename).suffix.lower())
+    if (not 1 <= len(filename) <= 180 or re.search(r"[\x00-\x1f\x7f]", filename)
+            or not content or not signature or not content.startswith(signature)):
+        return documents_page(env, start, db, session, "Vui lòng chọn tệp đúng định dạng.", "400 Bad Request")
+    if len(content) > MAX_DOCUMENT_BYTES:
+        return documents_page(env, start, db, session, "Tệp vượt quá 20 MB.", "413 Payload Too Large")
+    db.execute("INSERT INTO documents (filename, content) VALUES (?,?)", (filename, content))
+    db.commit()
+    return redirect(start, "/admin/documents")
+
+
+def download_document(start, db, document_id):
+    document = db.execute("SELECT filename, content FROM documents WHERE id=?", (document_id,)).fetchone()
+    if not document:
+        return respond(start, "404 Not Found")
+    disposition = "attachment; filename*=UTF-8''" + quote(document["filename"], safe="")
+    return respond(start, "200 OK", document["content"], "application/octet-stream",
+                   [("Content-Disposition", disposition)])
 
 
 def admin(env, start, path, method):
@@ -205,6 +288,17 @@ def admin(env, start, path, method):
         session = get_session(env, db)
         if method == "GET" and path == "/admin":
             return dashboard(env, start, db, session) if session else login_page(start)
+        if path == "/admin/documents" and method in {"GET", "POST"}:
+            if not session:
+                return redirect(start) if method == "GET" else respond(start, "403 Forbidden")
+            if method == "POST":
+                return upload_document(env, start, db, session)
+            return documents_page(env, start, db, session)
+        download = re.fullmatch(r"/admin/documents/([0-9]{1,18})", path)
+        if method == "GET" and download:
+            if not session:
+                return respond(start, "403 Forbidden")
+            return download_document(start, db, int(download[1]))
         if method != "POST" or path not in {"/admin/login", "/admin/logout", "/admin/status"}:
             return respond(start, "404 Not Found")
         if path != "/admin/login" and not session:
