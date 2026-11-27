@@ -28,14 +28,14 @@ document.querySelectorAll('[data-contact]').forEach(link => {
     const label = link.dataset.contactLabel || (isZalo ? 'Nhắn Zalo' : 'Gọi điện');
     link.setAttribute('aria-label', label + ' ' + displayPhone(number));
   } else {
-    link.href = '#lien-he';
+    link.href = '#contact';
     link.removeAttribute('target');
     link.removeAttribute('rel');
     link.setAttribute('aria-disabled', 'true');
     link.title = 'Số liên hệ đang được cập nhật';
     link.addEventListener('click', event => {
       event.preventDefault();
-      document.getElementById('lien-he').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+      document.getElementById('contact').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
       const notice = document.getElementById('contact-placeholder');
       notice.hidden = false;
       notice.textContent = isZalo ? 'Số Zalo đang được cập nhật. Vui lòng quay lại sau.' : 'Số hotline đang được cập nhật. Vui lòng quay lại sau.';
@@ -53,29 +53,40 @@ const nav = document.getElementById('main-nav');
 toggle.addEventListener('click', () => {
   const open = toggle.getAttribute('aria-expanded') !== 'true';
   toggle.setAttribute('aria-expanded', String(open));
-  nav.classList.toggle('is-open', open);
+  nav.classList.toggle('open', open);
 });
-function closeMenu() { toggle.setAttribute('aria-expanded', 'false'); nav.classList.remove('is-open'); }
+function closeMenu() { toggle.setAttribute('aria-expanded', 'false'); nav.classList.remove('open'); }
 nav.querySelectorAll('a').forEach(link => link.addEventListener('click', closeMenu));
-document.addEventListener('keydown', event => { if (event.key === 'Escape' && nav.classList.contains('is-open')) { closeMenu(); toggle.focus(); } });
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && nav.classList.contains('open')) { closeMenu(); toggle.focus(); } });
 
-// Chỉ hiển thị ảnh công việc của TĐ khi tải được tệp tương ứng.
-document.querySelectorAll('[data-work-photo]').forEach(figure => {
-  const photo = new Image();
-  photo.alt = figure.dataset.photoAlt;
-  photo.addEventListener('load', () => {
-    figure.prepend(photo);
-    figure.hidden = false;
-    figure.closest('.work-photos').hidden = false;
-  }, { once: true });
-  photo.src = figure.dataset.workPhoto;
-});
+const docSearch = document.getElementById('docSearch');
+const docFilters = [...document.querySelectorAll('#docFilters .filter')];
+const docCards = [...document.querySelectorAll('#docGrid .doc-card')];
 
-document.querySelectorAll('.service-card').forEach(card => {
-  const details = card.querySelector('details');
-  card.addEventListener('click', event => {
-    if (event.target.closest('summary, .service-article')) return;
-    details.open = !details.open;
+function searchText(value) {
+  return value.toLocaleLowerCase('vi').normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/đ/g, 'd');
+}
+
+function filterDocs() {
+  const query = searchText(docSearch.value.trim());
+  const category = docFilters.find(filter => filter.classList.contains('active')).dataset.filter;
+  docCards.forEach(card => {
+    card.hidden = (category !== 'all' && card.dataset.cat !== category) ||
+      !searchText(card.textContent).includes(query);
+  });
+  document.getElementById('noDocs').hidden = docCards.some(card => !card.hidden);
+}
+
+docSearch.addEventListener('input', filterDocs);
+document.getElementById('docSearchButton').addEventListener('click', filterDocs);
+docFilters.forEach(filter => {
+  filter.setAttribute('aria-pressed', String(filter.classList.contains('active')));
+  filter.addEventListener('click', () => {
+    docFilters.forEach(item => {
+      item.classList.toggle('active', item === filter);
+      item.setAttribute('aria-pressed', String(item === filter));
+    });
+    filterDocs();
   });
 });
 
