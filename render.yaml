@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: td-technical-service
+    runtime: python
+    region: singapore
+    plan: 0.5c-512mb
+    branch: admin-ho-tro
+    autoDeployTrigger: commit
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind "0.0.0.0:$PORT" --workers 1 --threads 2 server:application
+    healthCheckPath: /
+    envVars:
+      - key: TD_DATA_BACKEND
+        value: supabase
+      - key: TD_ADMIN_EMAIL
+        value: admin@tdservice.vn
+      - key: TD_ADMIN_PASSWORD
+        sync: false
+      - key: TD_DB_PATH
+        value: /var/data/td-support.sqlite3
+    disk:
+      name: td-support-data
+      mountPath: /var/data
+      sizeGB: 1

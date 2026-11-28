@@ -1,7 +1,0 @@
-﻿Ảnh công việc do TĐ thực hiện
-Chép ảnh JPG vào thư mục images với tên thang-may-thuc-te.jpg, bien-tan-thuc-te.jpg hoặc solar-thuc-te.jpg. Ảnh hợp lệ sẽ tự xuất hiện ở mục Năng lực.
-
-Ảnh tư liệu
-Các ảnh minh họa lưu trong images. Nguồn và chú thích hiển thị trong index.html.
-
-Số điện thoại và Zalo chỉnh tại đầu main.js.
