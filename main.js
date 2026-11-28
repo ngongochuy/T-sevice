@@ -93,10 +93,6 @@ docFilters.forEach(filter => {
 const supportForm = document.getElementById('support-form');
 const supportFormNote = document.getElementById('support-form-note');
 const supportSubmit = supportForm.querySelector('button[type="submit"]');
-const localPreview = ['127.0.0.1', 'localhost'].includes(location.hostname) && location.port === '5502';
-if (localPreview && !useSupabase) {
-  document.querySelector('[data-admin-link]').href = '/admin';
-}
 if (useSupabase) {
   document.querySelectorAll('[data-product-image]').forEach(image => {
     const uploaded = new Image();
@@ -265,23 +261,20 @@ supportForm.addEventListener('submit', async event => {
   quoteCancel.disabled = true;
   supportFormNote.textContent = 'Đang gửi yêu cầu…';
   try {
-    fields.set('customer', customer);
-    fields.set('callback', displayPhone(callback));
-    fields.set('description', description);
-    if (!useSupabase && !localPreview) throw new Error('Supabase chưa được cấu hình');
-    const response = await fetch(useSupabase ? supabaseUrl + '/rest/v1/rpc/td_submit_support' : '/api/support', {
+    if (!useSupabase) throw new Error('Supabase chưa được cấu hình');
+    const response = await fetch(supabaseUrl + '/rest/v1/rpc/td_submit_support', {
       method: 'POST',
-      headers: useSupabase ? { apikey: supabaseConfig.publishableKey, 'Content-Type': 'application/json' } : {},
-      body: useSupabase ? JSON.stringify({
+      headers: { apikey: supabaseConfig.publishableKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         p_customer: customer,
         p_phone: displayPhone(callback),
         p_equipment: fields.get('equipment'),
         p_description: description
-      }) : new URLSearchParams(fields),
+      }),
       signal: AbortSignal.timeout(20000)
     });
     const result = response.ok ? await response.json() : null;
-    if (useSupabase ? result !== true : result?.ok !== true) {
+    if (result !== true) {
       throw new Error('Yêu cầu chưa được xác nhận');
     }
     supportForm.reset();
