@@ -35,6 +35,8 @@ Mở `http://127.0.0.1:5502`. Dữ liệu thử được lưu trong `.data/suppo
 
 Bản thử Python vẫn dùng dữ liệu SQLite khi cấu hình Supabase để trống. Khi cấu hình Supabase được điền, website gửi yêu cầu sang Supabase. Tài liệu và ảnh đã tải lên SQLite chỉ xuất hiện trong Supabase sau khi chuyển dữ liệu.
 
+Để bật **Quên mật khẩu** trên GitHub Pages, thêm `https://ngongochuy.github.io/T-sevice/admin.html?recover=1` vào **Authentication → URL Configuration → Redirect URLs** của dự án Supabase. Người dùng nhập email trên trang admin, bấm **Quên mật khẩu** rồi mở liên kết trong cùng trình duyệt đã yêu cầu đặt lại.
+
 ### Render tự cập nhật từ GitHub
 
 1. Trong Render Dashboard, chọn **New → Blueprint** rồi kết nối repo `ngongochuy/T-sevice` và chọn nhánh `admin-ho-tro`.

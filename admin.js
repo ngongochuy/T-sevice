@@ -1,6 +1,7 @@
 const byId = id => document.getElementById(id);
 const notice = byId('admin-status');
 const loginForm = byId('admin-login');
+const recoveryForm = byId('recovery-form');
 const requestList = byId('requests-list');
 const documentList = byId('documents-list');
 const imageForm = byId('image-upload');
@@ -42,6 +43,7 @@ async function withButton(button, action, errorMessage) {
 
 function showLogin() {
   byId('admin-panel').hidden = true;
+  byId('recovery-panel').hidden = true;
   byId('login-panel').hidden = false;
   requestList.replaceChildren();
   documentList.replaceChildren();
@@ -51,6 +53,7 @@ function showLogin() {
   byId('documents-more').hidden = true;
   imageForm.reset();
   documentForm.reset();
+  recoveryForm.reset();
 }
 
 function renderRequest(item) {
@@ -182,11 +185,63 @@ async function startAdmin() {
     return;
   }
   const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/+esm');
+  const recoveryUrl = new URL(location.pathname, location.origin);
+  recoveryUrl.searchParams.set('recover', '1');
+  const recoveryReturn = new URL(location.href).searchParams.get('recover') === '1';
+  let recovering = false;
   client = createClient(supabaseUrl, supabaseConfig.publishableKey, {
-    auth: { detectSessionInUrl: false }
+    auth: { flowType: 'pkce', detectSessionInUrl: recoveryReturn }
   });
-  client.auth.onAuthStateChange(event => {
-    if (event === 'SIGNED_OUT') showLogin();
+  client.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY' && recoveryReturn && session) {
+      recovering = true;
+      byId('login-panel').hidden = true;
+      byId('admin-panel').hidden = true;
+      byId('recovery-panel').hidden = false;
+      history.replaceState(null, '', location.pathname);
+      setNotice('');
+    }
+    if (event === 'SIGNED_OUT') {
+      recovering = false;
+      showLogin();
+    }
+  });
+
+  byId('forgot-password').addEventListener('click', event => {
+    const email = loginForm.elements.email;
+    if (!email.reportValidity()) return;
+    withButton(event.currentTarget, async () => {
+      const { error } = await client.auth.resetPasswordForEmail(email.value.trim(), {
+        redirectTo: recoveryUrl.href
+      });
+      if (error) throw error;
+      setNotice('Nếu email đã đăng ký, hãy kiểm tra hộp thư và mở liên kết trong cùng trình duyệt.');
+    }, 'Chưa gửi được email đặt lại mật khẩu. Vui lòng thử lại sau.');
+  });
+
+  recoveryForm.addEventListener('submit', event => {
+    event.preventDefault();
+    if (!recovering) return;
+    const { newPassword, confirmation } = recoveryForm.elements;
+    if (newPassword.value !== confirmation.value) {
+      setNotice('Hai mật khẩu chưa khớp.', true);
+      confirmation.focus();
+      return;
+    }
+    withButton(event.submitter, async () => {
+      const { error } = await client.auth.updateUser({ password: newPassword.value });
+      if (error) {
+        setNotice(error.code === 'weak_password'
+          ? 'Mật khẩu chưa đạt yêu cầu bảo mật. Hãy chọn mật khẩu mạnh hơn.'
+          : 'Chưa đổi được mật khẩu. Hãy thử lại hoặc yêu cầu liên kết mới.', true);
+        return;
+      }
+      recovering = false;
+      recoveryForm.reset();
+      await client.auth.signOut({ scope: 'local' });
+      showLogin();
+      setNotice('Đã đặt mật khẩu mới. Hãy đăng nhập lại.');
+    }, 'Chưa hoàn tất được việc đặt lại mật khẩu. Vui lòng thử lại.');
   });
 
   loginForm.addEventListener('submit', event => {
@@ -263,6 +318,13 @@ async function startAdmin() {
   });
 
   const { data, error } = await client.auth.getSession();
+  if (recovering) return;
+  if (recoveryReturn) {
+    history.replaceState(null, '', location.pathname);
+    showLogin();
+    setNotice('Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn. Hãy yêu cầu liên kết mới.', true);
+    return;
+  }
   if (error) throw error;
   await showAdmin(data.session);
 }
